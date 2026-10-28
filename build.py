@@ -175,8 +175,8 @@ def collection_status(day, cal):
     status = item["status"].upper()
     if "SUSPEND" in status or "NOT IN EFFECT" in status:
         return "suspended", item["reason"]
-    if "DELAY" in status:
-        return "delayed", item["reason"]
+    if "DELAY" in status:  # the day(s) after a holiday; 311's reason reads like "Election Day 2026 Delayed"
+        return "delayed", item["reason"].removesuffix(" Delayed")
     if "ON SCHEDULE" in status:
         return "normal", ""
     return None
@@ -185,8 +185,10 @@ def collection_status(day, cal):
 def trash_today(state):
     if not state:
         return ""
-    if state[0] in ("suspended", "delayed"):
-        return f"Trash & recycling pickup today is {state[0]}" + (f" for {state[1]}" if state[1] else "") + "."
+    if state[0] == "delayed":
+        return "Trash & recycling pickup today is delayed" + (f" (holiday backlog after {state[1]})" if state[1] else "") + "."
+    if state[0] == "suspended":
+        return "Trash & recycling pickup today is suspended" + (f" for {state[1]}" if state[1] else "") + "."
     return "Trash & recycling pickup today is on schedule."
 
 
