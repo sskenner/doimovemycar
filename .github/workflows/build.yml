@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "7 * * * *"   # hourly: 311 can announce snow/emergency suspensions late in the day
   workflow_dispatch:
+    inputs:
+      intro_post:
+        description: "Post the one-time Bluesky welcome post (tests posting)"
+        type: boolean
+        default: false
   push:
     branches: [main]
 
@@ -75,4 +80,4 @@ jobs:
       - name: Post to Bluesky
         env:
           BSKY_APP_PASSWORD: ${{ secrets.BSKY_APP_PASSWORD }}
-        run: python post_bsky.py
+        run: python post_bsky.py ${{ inputs.intro_post && '--intro' || '' }}

@@ -61,6 +61,19 @@ def alerts(cal, today, hour):
     return out
 
 
+def intro(cal, today):
+    """One-time welcome post naming the next suspension."""
+    nxt = next((today + dt.timedelta(days=i) for i in range(1, 60)
+                if day_status(today + dt.timedelta(days=i), cal)[0] == "suspended"), None)
+    tail = ""
+    if nxt:
+        reason = day_status(nxt, cal)[1]
+        tail = f" Next up: {reason + ', ' if reason else ''}{label(nxt)}."
+    return ("👋 Do I Move My Car? answers the question every NYC driver asks: is alternate side parking in effect today? "
+            "We'll post here the evening before every suspension, and when snow or an emergency suspends it." + tail,
+            "answers the question every NYC driver asks")
+
+
 def with_link(text, site):
     """Append the site link and return (text, facets); facet offsets are UTF-8 byte positions."""
     link = site.split("//", 1)[1].rstrip("/")
@@ -87,13 +100,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--dry-run", action="store_true", help="print what would be posted, send nothing")
     parser.add_argument("--hour", type=int, help="pretend it's this hour in New York (testing)")
+    parser.add_argument("--intro", action="store_true", help="post the one-time welcome post (checks posting works)")
     args = parser.parse_args()
 
     cfg = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
     cal = json.loads(CALENDAR.read_text(encoding="utf-8"))
     now = nyc_now()
     hour = now.hour if args.hour is None else args.hour
-    todo = alerts(cal, now.date(), hour)
+    todo = [intro(cal, now.date())] if args.intro else alerts(cal, now.date(), hour)
     print(f"{now:%Y-%m-%d} hour {hour}: {len(todo)} alert(s) due (status source: {cal['source']})")
     for text, _ in todo:
         print(" ", text)
