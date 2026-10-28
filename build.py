@@ -418,7 +418,9 @@ def n_streets(streets, boro):
 
 
 def calendar_json(site, cal):
-    out = {"_meta": {"source": cal["source"], "built": cal["built"]}}  # which feed answered; app.js ignores it
+    live = sorted(cal["live"])
+    out = {"_meta": {"source": cal["source"], "built": cal["built"],  # which feed answered; app.js ignores it
+                     "live_days": len(live), "live_last": live[-1] if live else None}}
     for i in range(DAYS_AHEAD):
         day = site.today + dt.timedelta(days=i)
         status, reason = day_status(day, cal)
