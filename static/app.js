@@ -35,6 +35,12 @@
     live.textContent = d[0];
     live.className = "a " + (d[0] === "YES" ? "yes" : "no");
     document.querySelector("[data-why]").textContent = d[1];
+    var tl = document.querySelector("[data-trash]"), t = e[2];
+    if (tl && t) {
+      tl.hidden = false;
+      tl.textContent = "🗑️ Trash & recycling pickup today is " +
+        (t[0] === "suspended" ? "suspended" + (t[1] ? " for " + t[1] : "") : "on schedule") + ".";
+    }
     document.querySelectorAll(".week .d").forEach(function (li) {
       if (li.getAttribute("data-date") < today.iso) li.hidden = true;
     });

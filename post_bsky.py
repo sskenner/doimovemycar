@@ -2,7 +2,8 @@
 
 Runs after every hourly build and decides for itself whether anything is worth posting:
 
-  tomorrow  noon-midnight: tomorrow's ASP is suspended ("no need to move your car tomorrow").
+  tomorrow  noon-midnight: tomorrow's ASP is suspended ("no need to move your car tomorrow"), noting if trash
+            pickup is suspended too; or, if only trash pickup is suspended, a "no trash pickup tomorrow" post.
   back      noon-midnight: today was suspended and ASP is back tomorrow (people forget after a snow week).
   today     5-11 AM: ASP is suspended today but tomorrow-night's post couldn't have known (snow/emergency).
 
@@ -22,7 +23,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from build import CALENDAR, ROOT, day_status
+from build import CALENDAR, ROOT, collection_status, day_status
 
 PDS = "https://bsky.social/xrpc/"
 EVENING = range(12, 24)  # wide, because GitHub skips some hourly scheduled runs; any one run in the window posts
@@ -47,10 +48,17 @@ def alerts(cal, today, hour):
     t_status, t_reason = day_status(today, cal)
     n_status, n_reason = day_status(tomorrow, cal)
     out = []
+    n_trash = collection_status(tomorrow, cal)
+    trash_off = bool(n_trash) and n_trash[0] == "suspended"
     if hour in EVENING and n_status == "suspended":
         why = f" for {n_reason}" if n_reason else ""
-        out.append((f"🚗 No need to move your car tomorrow ({label(tomorrow)}): NYC alternate side parking is suspended{why}.",
+        also = " Trash & recycling pickup is suspended too." if trash_off else ""
+        out.append((f"🚗 No need to move your car tomorrow ({label(tomorrow)}): NYC alternate side parking is suspended{why}.{also}",
                     f"tomorrow ({label(tomorrow)})"))
+    elif hour in EVENING and trash_off:
+        why = f" for {n_trash[1]}" if n_trash[1] else ""
+        out.append((f"🗑️ No trash or recycling pickup tomorrow ({label(tomorrow)}): NYC Sanitation collection is suspended{why}. "
+                    "Alternate side parking rules still apply.", f"no trash pickup tomorrow ({label(tomorrow)})"))
     if hour in EVENING and t_status == "suspended" and n_status == "in_effect":
         out.append((f"⚠️ Heads up: NYC alternate side parking is back in effect tomorrow ({label(tomorrow)}). "
                     "Check the times on your block's signs.", f"back in effect tomorrow ({label(tomorrow)})"))

@@ -109,9 +109,9 @@ def ics_suspensions(year):
 
 
 def nyc311_days(today, key):
-    """{date: {status, reason}} from the 311 Public API, which includes emergency suspensions.
-    The API returns at most ~45 days per request, so ask in 30-day windows out to FEED_AHEAD."""
-    out = {}
+    """({date: parking item}, {date: collection item}, types seen) from the 311 Public API, which includes
+    emergency suspensions. The API returns at most ~45 days per request, so ask in 30-day windows."""
+    out, trash, types = {}, {}, {}
     for offset in range(0, FEED_AHEAD + 1, 30):
         start = today + dt.timedelta(days=offset)
         end = min(start + dt.timedelta(days=29), today + dt.timedelta(days=FEED_AHEAD))
@@ -122,10 +122,15 @@ def nyc311_days(today, key):
         for day in data.get("days", []):
             date = dt.datetime.strptime(str(day["today_id"]), "%Y%m%d").date().isoformat()
             for item in day.get("items", []):
-                if "parking" in item.get("type", "").lower():
-                    out[date] = {"status": item.get("status", ""), "reason": item.get("exceptionName") or "",
-                                 "details": item.get("details", "")}
-    return out
+                kind = item.get("type", "")
+                types.setdefault(kind, set()).add(item.get("status", ""))
+                entry = {"status": item.get("status", ""), "reason": item.get("exceptionName") or "",
+                         "details": item.get("details", "")}
+                if "parking" in kind.lower():
+                    out[date] = entry
+                elif any(w in kind.lower() for w in ("collection", "sanitation", "trash", "garbage")):
+                    trash[date] = entry
+    return out, trash, {k: sorted(v) for k, v in types.items()}
 
 
 def fetch_calendar(today):
@@ -133,14 +138,14 @@ def fetch_calendar(today):
     holidays = {}
     for year in {today.year, (today + dt.timedelta(days=FEED_AHEAD)).year}:
         holidays.update(ics_suspensions(year))
-    live = {}
+    live, trash, types = {}, {}, {}
     if key:
         try:
-            live = nyc311_days(today, key)
+            live, trash, types = nyc311_days(today, key)
         except (urllib.error.URLError, ValueError, KeyError) as e:
             print(f"  311 calendar unavailable ({e}); using the DOT holiday calendar only")
     return {"built": dt.datetime.now(dt.timezone.utc).isoformat(timespec="minutes"), "source": "311" if live else "ics",
-            "holidays": holidays, "live": live}
+            "holidays": holidays, "live": live, "collections": trash, "types": types}
 
 
 def day_status(day, cal):
@@ -158,6 +163,26 @@ def day_status(day, cal):
     if iso in cal["holidays"]:
         return "suspended", cal["holidays"][iso]["reason"]
     return "in_effect", ""
+
+
+def collection_status(day, cal):
+    """('normal' | 'suspended', reason) for DSNY trash/recycling/compost pickup, or None if 311 didn't say.
+    Sundays return None: most of the city has no pickup then anyway."""
+    item = cal.get("collections", {}).get(day.isoformat())
+    if not item or day.weekday() == 6:
+        return None
+    status = item["status"].upper()
+    if any(w in status for w in ("SUSPEND", "CANCEL", "NOT IN EFFECT", "NO COLLECTION")):
+        return "suspended", item["reason"]
+    return "normal", ""
+
+
+def trash_today(state):
+    if not state:
+        return ""
+    if state[0] == "suspended":
+        return "Trash & recycling pickup today is suspended" + (f" for {state[1]}" if state[1] else "") + "."
+    return "Trash & recycling pickup today is on schedule."
 
 
 # ---------------------------------------------------------------- shaping
@@ -365,7 +390,9 @@ def week_strip(site, cal):
         label = {"in_effect": "In effect", "suspended": "Suspended", "sunday": "No ASP"}[status]
         note = esc(reason) if reason else ("Sunday" if status == "sunday" else "Move for the signs")
         cells.append(f'<li class="d {status}" data-date="{day.isoformat()}"><b>{"Today" if i == 0 else "Tomorrow" if i == 1 else f"{day:%a}"}</b>'
-                     f'<span class="dt">{day:%b} {day.day}</span><span class="st">{label}</span><span class="why">{note}</span></li>')
+                     f'<span class="dt">{day:%b} {day.day}</span><span class="st">{label}</span><span class="why">{note}</span>'
+                     + ('<span class="tr">🗑️ No trash pickup</span>' if (collection_status(day, cal) or ("",))[0] == "suspended" else "")
+                     + '</li>')
     return f'<ol class="week">{"".join(cells)}</ol>'
 
 
@@ -377,8 +404,12 @@ def answer_block(site, cal):
         a, why = "NO", f"Alternate side parking is suspended today for {reason}." if reason else "Alternate side parking is suspended today."
     else:
         a, why = "NO", "Alternate side parking isn't in effect on Sundays."
+    trash = trash_today(collection_status(site.today, cal))
+    trash_html = (f'<p class="trash" data-trash>🗑️ {esc(trash)}</p>' if trash
+                  else '<p class="trash" data-trash hidden></p>')
     return (f'<section class="hero" id="answer"><p class="q">Do I have to move my car today for alternate side parking?</p>'
-            f'<p class="a {"yes" if a == "YES" else "no"}" data-live>{a}</p><p class="why" data-why>{esc(why)}</p></section>')
+            f'<p class="a {"yes" if a == "YES" else "no"}" data-live>{a}</p><p class="why" data-why>{esc(why)}</p>'
+            f'{trash_html}</section>')
 
 
 RULES = """<ul class="rules">
@@ -424,11 +455,13 @@ def n_streets(streets, boro):
 def calendar_json(site, cal):
     live = sorted(cal["live"])
     out = {"_meta": {"source": cal["source"], "built": cal["built"],  # which feed answered; app.js ignores it
-                     "live_days": len(live), "live_last": live[-1] if live else None}}
+                     "live_days": len(live), "live_last": live[-1] if live else None,
+                     "collection_days": len(cal.get("collections", {})), "types": cal.get("types", {})}}
     for i in range(DAYS_AHEAD):
         day = site.today + dt.timedelta(days=i)
         status, reason = day_status(day, cal)
-        out[day.isoformat()] = [status, reason]
+        trash = collection_status(day, cal)
+        out[day.isoformat()] = [status, reason, list(trash) if trash else None]
     return out
 
 
@@ -456,14 +489,22 @@ def write_feed(site, cal):
     """Subscribable calendar of upcoming ASP suspensions (holidays plus any 311 snow/emergency ones)."""
     base = site.cfg["base_url"].rstrip("/") + "/"
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    days = sorted({dt.date.fromisoformat(d) for d in list(cal["holidays"]) + list(cal["live"])
+    days = sorted({dt.date.fromisoformat(d) for d in list(cal["holidays"]) + list(cal["live"]) + list(cal.get("collections", {}))
                    if dt.date.fromisoformat(d) >= site.today - dt.timedelta(days=7)})
     lines = ["BEGIN:VCALENDAR", "VERSION:2.0", f"PRODID:-//{site.cfg['domain']}//ASP suspensions//EN", "CALSCALE:GREGORIAN",
-             "METHOD:PUBLISH", "X-WR-CALNAME:NYC Alternate Side Parking Suspensions",
+             "METHOD:PUBLISH", "X-WR-CALNAME:NYC Alternate Side Parking & Trash Pickup Suspensions",
              "X-WR-CALDESC:" + ics_escape(f"Days NYC alternate side parking is suspended, from NYC 311 and DOT. {base}"),
              "X-WR-TIMEZONE:America/New_York", "REFRESH-INTERVAL;VALUE=DURATION:PT1H", "X-PUBLISHED-TTL:PT1H"]
     n = 0
     for day in days:
+        trash = collection_status(day, cal)
+        if trash and trash[0] == "suspended":
+            lines += ["BEGIN:VEVENT", f"UID:trash-{day:%Y%m%d}@{site.cfg['domain']}", f"DTSTAMP:{stamp}",
+                      f"DTSTART;VALUE=DATE:{day:%Y%m%d}", f"DTEND;VALUE=DATE:{day + dt.timedelta(days=1):%Y%m%d}",
+                      "SUMMARY:" + ics_escape("🗑️ No trash pickup: " + (trash[1] or "suspended")),
+                      "DESCRIPTION:" + ics_escape(f"NYC Sanitation trash, recycling and compost pickup is suspended. {base}"),
+                      f"URL:{base}", "TRANSP:TRANSPARENT", "END:VEVENT"]
+            n += 1
         status, reason = day_status(day, cal)
         if status != "suspended":
             continue
@@ -488,7 +529,7 @@ def feed_card(site):
     bsky = next((s["url"] for s in site.cfg.get("social", []) if s["label"] == "Bluesky"), "")
     bluesky = f'follow us on <a href="{esc(bsky)}">Bluesky</a>' if bsky else "check this page"
     return f"""<section class="card feed" id="calendar"><h2>Get suspensions in your calendar</h2>
-<p>Subscribe once and every alternate side parking suspension shows up on your phone, including snow and emergency ones when 311 announces them.</p>
+<p>Subscribe once and every alternate side parking and trash pickup suspension shows up on your phone, including snow and emergency ones when 311 announces them.</p>
 <p class="feed-links"><a class="btn" href="{esc(google)}" rel="noopener" target="_blank">Add to Google Calendar</a>
 <a class="btn" href="{esc(webcal)}">Add to Apple / Outlook</a></p>
 <p class="fine">Other apps: subscribe to <code>{esc(https)}</code>. Calendar apps refresh on their own schedule (Google can take hours),
