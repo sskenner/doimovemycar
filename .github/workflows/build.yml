@@ -36,8 +36,10 @@ jobs:
       # street-cleaning signs change slowly: fetch them once a day, reuse them for the hourly status builds
       - uses: actions/cache@v4
         with:
-          path: data/signs.json
-          key: signs-${{ steps.day.outputs.date }}
+          path: |
+            data/signs.json
+            data/dsny_areas.json
+          key: signs-v2-${{ steps.day.outputs.date }}
       - name: Build site
         env:
           NYC_API_KEY: ${{ secrets.NYC_API_KEY }}

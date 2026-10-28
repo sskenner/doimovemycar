@@ -20,12 +20,17 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+import geo
+
 ROOT = Path(__file__).resolve().parent
 DIST = ROOT / "dist"
 SIGNS = ROOT / "data" / "signs.json"
 CALENDAR = ROOT / "data" / "calendar.json"
+AREAS = ROOT / "data" / "dsny_areas.json"
 
 SIGNS_API = "https://data.cityofnewyork.us/resource/nfid-uabd.json"
+AREAS_API = "https://data.cityofnewyork.us/resource/rv63-53db.geojson"  # DSNY Frequencies: pickup days by area
+DSNY_SETOUT = "https://www.nyc.gov/site/dsny/collection/residents/trash.page"
 SIGNS_WHERE = "record_type='Current' AND sign_description like '%BROOM%'"
 ICS_URL = "https://www.nyc.gov/html/dot/downloads/misc/{year}-alternate-side.ics"
 NYC311_URL = "https://api.nyc.gov/public/api/GetCalendar"
@@ -69,7 +74,8 @@ def fetch_signs():
     rows, offset = [], 0
     token = os.environ.get("SOCRATA_APP_TOKEN")
     while True:
-        params = {"$select": "borough,on_street,from_street,to_street,side_of_street,sign_description,count(*) as n",
+        params = {"$select": "borough,on_street,from_street,to_street,side_of_street,sign_description,count(*) as n,"
+                             "avg(sign_x_coord) as x,avg(sign_y_coord) as y",
                   "$where": SIGNS_WHERE,
                   "$group": "borough,on_street,from_street,to_street,side_of_street,sign_description",
                   "$order": "borough,on_street,from_street,to_street,side_of_street,sign_description",
@@ -80,6 +86,14 @@ def fetch_signs():
         if len(page) < PAGE_SIZE:
             return rows
         offset += PAGE_SIZE
+
+
+def fetch_areas():
+    """DSNY collection areas (MultiPolygons) with their trash/recycling/compost/bulk days."""
+    keep = ("section", "schedulecode", "freq_refuse", "freq_recycling", "freq_organics", "freq_bulk")
+    data = json.loads(get(AREAS_API + "?" + urllib.parse.urlencode({"$limit": 5000})))
+    return [{"geometry": f["geometry"], "properties": {k: f["properties"].get(k) for k in keep}}
+            for f in data["features"] if f.get("geometry")]
 
 
 def ics_suspensions(year):
@@ -254,8 +268,10 @@ def slugify(text):
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
 
 
-def shape(rows):
-    """{(borough, street): {"name", "path", "blocks": [...]}} with one entry per block side and schedule."""
+def shape(rows, areas=None):
+    """{(borough, street): {"name", "path", "blocks": [...], "pickup": [...]}} with one entry per block side and
+    schedule. With DSNY areas, each block also gets the trash/recycling/compost days of the area it's in."""
+    index = geo.AreaIndex(areas) if areas else None
     streets = {}
     for r in rows:
         boro = street_name(r.get("borough"))
@@ -271,6 +287,7 @@ def shape(rows):
             "days": list(sched[0]) if sched else [],
             "when": f"{fmt_days(sched[0])}, {fmt_range(sched[1], sched[2])}" if sched else clean_desc(r["sign_description"]),
             "sort": (sched[1] if sched else ""),
+            "area": block_area(index, r),
         })
     for s in streets.values():
         # one row per block side + schedule; a long block can repeat the same sign many times
@@ -282,7 +299,35 @@ def shape(rows):
                 blocks.append(b)
         s["blocks"] = blocks
         s["n_blocks"] = len({(b["from"], b["to"]) for b in blocks})
+        s["pickup"] = pickup_groups(blocks)
     return streets
+
+
+def block_area(index, row):
+    if not index or not row.get("x") or not row.get("y"):
+        return None
+    lon, lat = geo.stateplane_to_lonlat(float(row["x"]), float(row["y"]))
+    return index.find(lon, lat)
+
+
+def pickup_groups(blocks):
+    """[(area properties, [block labels])], one per distinct DSNY schedule on the street, biggest first."""
+    groups = {}
+    for b in blocks:
+        a = b.get("area")
+        if not a:
+            continue
+        key = (a["freq_refuse"], a["freq_recycling"], a["freq_organics"])
+        label = f'{b["from"]} – {b["to"]}'
+        props, labels = groups.setdefault(key, (a, []))
+        if label not in labels:
+            labels.append(label)
+    return sorted(groups.values(), key=lambda g: -len(g[1]))
+
+
+def weekday_numbers(days):
+    """'Mon, Wed, Fri' -> [0, 2, 4]"""
+    return [DAY_SHORT.index(d.strip()[:3]) for d in (days or "").split(",") if d.strip()[:3] in DAY_SHORT]
 
 
 def clean_desc(desc):
@@ -547,6 +592,31 @@ def feed_card(site):
 so for last-minute changes {bluesky}.</p></section>"""
 
 
+def pickup_card(s):
+    groups = s.get("pickup") or []
+    if not groups:
+        return ""
+    items = []
+    for a, labels in groups:
+        days = " ".join(f'<b>{name}</b> {esc((a[key] or "").replace(", ", " · "))}'
+                        for name, key in (("Trash", "freq_refuse"), ("Recycling", "freq_recycling"), ("Compost", "freq_organics"))
+                        if a.get(key))
+        n = len(labels)
+        if len(groups) == 1:
+            where = f'<span class="muted">All {n} block{"s" if n != 1 else ""} listed below</span>'
+        else:
+            where = (f'<details><summary>{n} block{"s" if n != 1 else ""}</summary>'
+                     f'{esc(", ".join(sorted(labels, key=natural)))}</details>')
+        items.append(f'<li data-trash="{",".join(map(str, weekday_numbers(a["freq_refuse"])))}"><p>{days}</p>{where}</li>')
+    return f"""<section class="card pickup" data-pickup><h2>Trash &amp; recycling pickup on {esc(s['name'])}</h2>
+<p data-pickup-note hidden></p>
+<ul class="pickups">{"".join(items)}</ul>
+<p class="fine">Put trash out the evening before pickup: after 6 PM in a bin with a lid (buildings with 1–9 units must use
+official NYC Bins), or bags on the curb after 8 PM in buildings with 10+ units. Everything out by midnight.
+<a href="{DSNY_SETOUT}" rel="noopener">DSNY rules</a>. Pickup days from DSNY's collection areas on NYC Open Data;
+holidays and snow can change them (see the home page).</p></section>"""
+
+
 def build_street(site, s):
     rows = "".join(
         f'<tr data-days="{",".join(map(str, b["days"]))}"><td>{esc(b["from"])} – {esc(b["to"])}</td>'
@@ -557,6 +627,7 @@ def build_street(site, s):
 <div class="card status" data-street-status><p><b data-today-label>Today:</b> <span data-today-text>checking…</span></p></div>
 <p class="lede">Street-cleaning times for {s['n_blocks']:,} block{'s' if s['n_blocks'] != 1 else ''} of {esc(s['name'])}, from the city's sign records.
 Rows highlighted are cleaned today.</p>
+{pickup_card(s)}
 {site.ad("adsense_slot_inline")}
 <section class="card"><h2>Block-by-block schedule</h2><div class="scroll"><table class="sched">
 <thead><tr><th>Block</th><th>Side</th><th>No parking</th></tr></thead><tbody>{rows}</tbody></table></div>
@@ -595,8 +666,8 @@ based on your visits to this and other sites. You can opt out of personalized ad
 <a href="https://www.google.com/settings/ads">Google Ads Settings</a>.</p></section>""")
 
 
-def build(cal, rows, cfg, today):
-    streets = shape(rows)
+def build(cal, rows, cfg, today, areas=None):
+    streets = shape(rows, areas)
     if DIST.exists():
         shutil.rmtree(DIST)
     shutil.copytree(ROOT / "static", DIST / "static")
@@ -644,17 +715,20 @@ def main():
     cfg = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
     today = nyc_today()
     SIGNS.parent.mkdir(exist_ok=True)
-    if args.offline or (args.keep_signs and SIGNS.exists()):
+    if args.offline or (args.keep_signs and SIGNS.exists() and AREAS.exists()):
         rows = json.loads(SIGNS.read_text(encoding="utf-8"))
+        areas = json.loads(AREAS.read_text(encoding="utf-8")) if AREAS.exists() else None
     else:
         rows = fetch_signs()
         SIGNS.write_text(json.dumps(rows), encoding="utf-8")
+        areas = fetch_areas()
+        AREAS.write_text(json.dumps(areas), encoding="utf-8")
     if args.offline:
         cal = json.loads(CALENDAR.read_text(encoding="utf-8"))
     else:
         cal = fetch_calendar(today)
         CALENDAR.write_text(json.dumps(cal), encoding="utf-8")
-    build(cal, rows, cfg, today)
+    build(cal, rows, cfg, today, areas)
 
 
 if __name__ == "__main__":

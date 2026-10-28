@@ -68,6 +68,24 @@
     }
   });
 
+  // street pages: today's / tomorrow's trash pickup for each DSNY schedule on the street
+  var pickup = document.querySelector("[data-pickup]");
+  if (pickup) withCalendar(function (cal) {
+    var tomorrowIso = new Date(Date.parse(today.iso + "T12:00:00Z") + 86400000).toISOString().slice(0, 10);
+    var t0 = (cal[today.iso] || [])[2], t1 = (cal[tomorrowIso] || [])[2];
+    var tomorrowWd = (today.weekday + 1) % 7, rows = pickup.querySelectorAll("[data-trash]"), nToday = 0, nTomorrow = 0;
+    rows.forEach(function (tr) {
+      var days = (tr.getAttribute("data-trash") || "").split(",");
+      if (days.indexOf(String(today.weekday)) >= 0 && t0 && t0[0] !== "suspended") { tr.classList.add("today"); nToday++; }
+      if (days.indexOf(String(tomorrowWd)) >= 0 && t1 && t1[0] !== "suspended") nTomorrow++;
+    });
+    var some = function (n) { return n === rows.length ? "" : " on some blocks"; };
+    var note = pickup.querySelector("[data-pickup-note]");
+    if (nTomorrow) note.textContent = "🗑️ Trash pickup tomorrow" + some(nTomorrow) + ": set it out tonight after 6 PM (in a lidded bin) or 8 PM (bags).";
+    else if (nToday) note.textContent = "🗑️ Trash pickup today" + some(nToday) + " (highlighted).";
+    if (note.textContent) note.hidden = false;
+  });
+
   // street search
   var q = document.getElementById("q"), results = document.getElementById("results"), index = null;
   var ABBR = { ave: "avenue", av: "avenue", st: "street", rd: "road", blvd: "boulevard", pl: "place", pkwy: "parkway",

@@ -193,3 +193,15 @@ table.sched tr.today td { background: var(--today-row); }
 
 .hero .trash { margin: 12px auto 0; color: var(--text-secondary); font-size: .95rem; }
 .week .tr { color: var(--text-muted); font-size: .8rem; }
+
+.pickup [data-pickup-note] { font-weight: 600; margin: 0 0 8px; }
+
+.pickups { list-style: none; padding: 0; margin: 0; }
+.pickups li { padding: 10px 12px; margin: 0 -12px; border-bottom: 1px solid var(--border); border-radius: 6px; }
+.pickups li:last-child { border-bottom: 0; }
+.pickups li.today { background: var(--today-row); }
+.pickups p { margin: 0 0 4px; }
+.pickups b { margin-right: 4px; }
+.pickups b:not(:first-child) { margin-left: 12px; }
+.pickups details { color: var(--text-secondary); font-size: .9rem; }
+.pickups summary { cursor: pointer; color: var(--link); }
