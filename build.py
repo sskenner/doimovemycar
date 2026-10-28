@@ -462,7 +462,10 @@ def calendar_json(site, cal):
     live = sorted(cal["live"])
     out = {"_meta": {"source": cal["source"], "built": cal["built"],  # which feed answered; app.js ignores it
                      "live_days": len(live), "live_last": live[-1] if live else None,
-                     "collection_days": len(cal.get("collections", {})), "types": cal.get("types", {})}}
+                     "collection_days": len(cal.get("collections", {})), "types": cal.get("types", {}),
+                     # raw 311 wording for non-routine pickup days, to check the status mapping
+                     "collections_raw": {d: c for d, c in sorted(cal.get("collections", {}).items())
+                                         if c["status"] not in ("ON SCHEDULE", "NO INFORMATION")}}}
     for i in range(DAYS_AHEAD):
         day = site.today + dt.timedelta(days=i)
         status, reason = day_status(day, cal)
