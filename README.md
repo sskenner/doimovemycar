@@ -32,7 +32,7 @@ GitHub Pages via `.github/workflows/build.yml`, rebuilt hourly (signs refreshed 
 
 After each hourly build, `post_bsky.py` posts to [@doimovemycar.com](https://bsky.app/profile/doimovemycar.com) when:
 
-- **6 PM–midnight:** tomorrow's ASP is suspended, or ASP is back in effect tomorrow after a suspension.
+- **Noon–midnight:** tomorrow's ASP is suspended, or ASP is back in effect tomorrow after a suspension.
 - **5–11 AM:** ASP is suspended today for a reason that isn't on the holiday calendar (snow, emergencies).
 
 Each alert names its date and is posted once. Needs a Bluesky app password saved as the `BSKY_APP_PASSWORD`

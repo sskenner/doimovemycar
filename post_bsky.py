@@ -2,8 +2,8 @@
 
 Runs after every hourly build and decides for itself whether anything is worth posting:
 
-  tomorrow  6 PM-midnight: tomorrow's ASP is suspended ("no need to move your car tomorrow").
-  back      6 PM-midnight: today was suspended and ASP is back tomorrow (people forget after a snow week).
+  tomorrow  noon-midnight: tomorrow's ASP is suspended ("no need to move your car tomorrow").
+  back      noon-midnight: today was suspended and ASP is back tomorrow (people forget after a snow week).
   today     5-11 AM: ASP is suspended today but tomorrow-night's post couldn't have known (snow/emergency).
 
 Each alert names its date, and the script skips any alert already in the account's recent posts, so the
@@ -25,7 +25,7 @@ import urllib.request
 from build import CALENDAR, ROOT, day_status
 
 PDS = "https://bsky.social/xrpc/"
-EVENING = range(18, 24)
+EVENING = range(12, 24)  # wide, because GitHub skips some hourly scheduled runs; any one run in the window posts
 MORNING = range(5, 12)
 
 
