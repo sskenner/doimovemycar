@@ -16,6 +16,15 @@
     {"label": "Threads", "url": "https://www.threads.com/@doimovemycar"}
   ],
 
+  "amazon_tag": "doimovemycar-20",
+  "amazon_products": [
+    {"label": "Snow brush & ice scraper", "query": "extendable snow brush ice scraper car", "note": "Clear the car fast when ASP comes back after a storm"},
+    {"label": "Collapsible snow shovel", "query": "collapsible car snow shovel", "note": "For digging out after the plows bury your spot"},
+    {"label": "Portable jump starter", "query": "portable car jump starter", "note": "Cold nights on the street drain batteries"},
+    {"label": "Cordless tire inflator", "query": "cordless portable tire inflator", "note": "Top up the tires without hunting for a gas-station pump"},
+    {"label": "Front & rear dash cam", "query": "dash cam front and rear parking mode", "note": "Parking mode records if someone hits your parked car"}
+  ],
+
   "referrals": [
     {"label": "Book a garage spot", "url": "", "note": "Reserve monthly or daily parking near you"},
     {"label": "Compare car insurance", "url": "", "note": "City drivers often overpay"}

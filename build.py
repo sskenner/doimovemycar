@@ -276,13 +276,27 @@ class Site:
         return (f'<ins class="adsbygoogle ad" style="display:block" data-ad-client="{esc(client)}" data-ad-slot="{esc(slot)}"'
                 ' data-ad-format="auto" data-full-width-responsive="true"></ins><script>(adsbygoogle=window.adsbygoogle||[]).push({});</script>')
 
-    def referrals(self):
-        items = "".join(f'<li><a href="{esc(r["url"])}" rel="sponsored noopener">{esc(r["label"])}</a><span>{esc(r["note"])}</span></li>'
-                        for r in self.cfg.get("referrals", []) if r.get("url"))
+    def shop(self, heading="Gear for NYC street parkers"):
+        tag = self.cfg.get("amazon_tag")
+        items = []
+        for p in self.cfg.get("amazon_products", []):
+            q = {"k": p["query"]}
+            if tag:
+                q["tag"] = tag
+            href = "https://www.amazon.com/s?" + urllib.parse.urlencode(q)
+            items.append(f'<li><a href="{esc(href)}" rel="sponsored nofollow noopener" target="_blank">'
+                         f'{esc(p["label"])}</a><span>{esc(p["note"])}</span></li>')
+        for r in self.cfg.get("referrals", []):
+            if r.get("url"):
+                items.append(f'<li><a href="{esc(r["url"])}" rel="sponsored nofollow noopener" target="_blank">'
+                             f'{esc(r["label"])}</a><span>{esc(r["note"])}</span></li>')
         if not items:
             return ""
-        return (f'<aside class="card shop"><h2>Skip the car shuffle</h2><ul>{items}</ul>'
-                '<p class="fine">We may earn a commission from these links. It doesn\'t change what you pay.</p></aside>')
+        # Amazon's Operating Agreement requires this exact sentence wherever Associates links appear
+        amazon = " As an Amazon Associate I earn from qualifying purchases." if tag else ""
+        return (f'<aside class="card shop"><h2>{esc(heading)}</h2><ul>{"".join(items)}</ul>'
+                "<p class=\"fine\">We may earn a commission from these links. It doesn't change what you pay."
+                f'{amazon}</p></aside>')
 
     def page(self, path, title, description, body, index=True):
         cfg = self.cfg
@@ -388,7 +402,7 @@ def build_home(site, cal, streets):
 <p class="fine">Snow and emergency suspensions are announced by 311, sometimes late the day before. This page updates every hour.</p></section>
 <section class="card"><h2>Browse by borough</h2><ul class="zips">{boros}</ul></section>
 <section class="card"><h2>The rules</h2>{RULES}</section>
-{site.referrals()}
+{site.shop()}
 <script type="application/json" id="cal">{json.dumps(calendar_json(site, cal))}</script>"""
     site.page("", f"{site.cfg['site_name']} Is alternate side parking in effect today in NYC?",
               "Is NYC alternate side parking in effect today? A live yes/no answer, this week's suspensions, "
@@ -419,7 +433,7 @@ Rows highlighted are cleaned today.</p>
 <thead><tr><th>Block</th><th>Side</th><th>No parking</th></tr></thead><tbody>{rows}</tbody></table></div>
 <p class="fine">From NYC DOT sign records. Signs change; the sign on your block always wins.</p></section>
 <section class="card"><h2>The rules</h2>{RULES}</section>
-{site.referrals()}"""
+{site.shop()}"""
     site.page(s["path"], f"{s['name']}, {s['borough']} alternate side parking schedule",
               f"When to move your car for street cleaning on {s['name']} in {s['borough']}: block-by-block alternate side parking times.",
               body)
@@ -443,6 +457,7 @@ def build_static_pages(site):
 (which includes snow and emergency suspensions) every hour, with the NYC DOT holiday calendar as a backup, and lists street-cleaning
 times for every block from the city's sign records on NYC Open Data.</p>
 <p>It's an independent project, not affiliated with the City of New York. Data can be wrong or out of date. Always check the signs on your block.</p>
+<p>Some links go to Amazon or other partners, and we may earn a commission at no cost to you. As an Amazon Associate I earn from qualifying purchases.</p>
 <p>Questions or errors? Email <a href="mailto:{esc(site.cfg['contact_email'])}">{esc(site.cfg['contact_email'])}</a>.</p></section>""")
     site.page("privacy/", "Privacy policy", "What this site collects.", """<h1>Privacy policy</h1>
 <section class="card"><p>This site has no accounts and doesn't ask for personal information. Street searches run in your browser.</p>
