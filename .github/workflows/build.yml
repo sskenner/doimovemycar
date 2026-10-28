@@ -1,0 +1,53 @@
+name: Build and deploy
+
+on:
+  schedule:
+    - cron: "7 * * * *"   # hourly: 311 can announce snow/emergency suspensions late in the day
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Date in New York
+        id: day
+        run: echo "date=$(TZ=America/New_York date +%F)" >> "$GITHUB_OUTPUT"
+      # street-cleaning signs change slowly: fetch them once a day, reuse them for the hourly status builds
+      - uses: actions/cache@v4
+        with:
+          path: data/signs.json
+          key: signs-${{ steps.day.outputs.date }}
+      - name: Build site
+        env:
+          NYC_API_KEY: ${{ secrets.NYC_API_KEY }}
+          SOCRATA_APP_TOKEN: ${{ secrets.SOCRATA_APP_TOKEN }}
+        run: python build.py --keep-signs
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

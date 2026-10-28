@@ -1,0 +1,16 @@
+{
+  "site_name": "Do I Move My Car?",
+  "domain": "doimovemycar.com",
+  "base_url": "https://doimovemycar.com",
+  "base_path": "/",
+  "contact_email": "411@noheatnyc.com",
+
+  "adsense_client": "", "adsense_slot_top": "", "adsense_slot_inline": "", "ga4_id": "",
+
+  "social": [],
+
+  "referrals": [
+    {"label": "Book a garage spot", "url": "", "note": "Reserve monthly or daily parking near you"},
+    {"label": "Compare car insurance", "url": "", "note": "City drivers often overpay"}
+  ]
+}
