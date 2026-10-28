@@ -184,3 +184,9 @@ table.sched tr.today td { background: var(--today-row); }
   table.sched { font-size: .9rem; }
   table.sched th, table.sched td { padding: 8px 4px; }
 }
+
+.feed-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { display: inline-block; padding: 10px 16px; border-radius: 8px; background: var(--text-primary); color: var(--surface-1);
+       text-decoration: none; font-weight: 600; }
+.btn:hover { opacity: .9; }
+.feed code { word-break: break-all; }

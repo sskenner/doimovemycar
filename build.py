@@ -30,7 +30,9 @@ SIGNS_WHERE = "record_type='Current' AND sign_description like '%BROOM%'"
 ICS_URL = "https://www.nyc.gov/html/dot/downloads/misc/{year}-alternate-side.ics"
 NYC311_URL = "https://api.nyc.gov/public/api/GetCalendar"
 PAGE_SIZE = 50000
-DAYS_AHEAD = 14
+DAYS_AHEAD = 14       # days shown on the site and in calendar.json
+FEED_AHEAD = 89       # days of 311 status fetched for the calendar feed (the API caps ranges at 90)
+FEED_URL_PATH = "asp-suspensions.ics"
 
 DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 DAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -108,7 +110,7 @@ def ics_suspensions(year):
 def nyc311_days(today, key):
     """{date: {status, reason}} from the 311 Public API, which includes emergency suspensions."""
     params = {"fromdate": today.strftime("%m/%d/%Y"),
-              "todate": (today + dt.timedelta(days=DAYS_AHEAD - 1)).strftime("%m/%d/%Y")}
+              "todate": (today + dt.timedelta(days=FEED_AHEAD)).strftime("%m/%d/%Y")}
     data = json.loads(get(NYC311_URL + "?" + urllib.parse.urlencode(params), {"Ocp-Apim-Subscription-Key": key}))
     out = {}
     if not data.get("days"):
@@ -125,7 +127,7 @@ def nyc311_days(today, key):
 def fetch_calendar(today):
     key = os.environ.get("NYC_API_KEY")
     holidays = {}
-    for year in {today.year, (today + dt.timedelta(days=DAYS_AHEAD)).year}:
+    for year in {today.year, (today + dt.timedelta(days=FEED_AHEAD)).year}:
         holidays.update(ics_suspensions(year))
     live = {}
     if key:
@@ -390,7 +392,7 @@ def build_home(site, cal, streets):
                   f'<span class="muted">{" · meters in effect" if h["meters"] else " · meters suspended too"}</span></li>'
                   for d, h in upcoming)
     boros = "".join(f'<li><a href="{site.url("street/" + slug + "/")}">{b}</a> <span class="muted">'
-                    f'{sum(1 for (bb, _) in streets if bb == b):,} streets</span></li>' for b, slug in BOROUGH_SLUGS.items())
+                    f'{n_streets(streets, b)}</span></li>' for b, slug in BOROUGH_SLUGS.items())
     body = f"""{answer_block(site, cal)}
 {week_strip(site, cal)}
 <section class="card search" id="search"><h2>When do I move my car on my street?</h2>
@@ -400,6 +402,7 @@ def build_home(site, cal, streets):
 {site.ad("adsense_slot_top")}
 <section class="card"><h2>Upcoming suspensions</h2><ul class="hols">{hol or '<li>No suspensions on the city calendar in the next weeks.</li>'}</ul>
 <p class="fine">Snow and emergency suspensions are announced by 311, sometimes late the day before. This page updates every hour.</p></section>
+{feed_card(site)}
 <section class="card"><h2>Browse by borough</h2><ul class="zips">{boros}</ul></section>
 <section class="card"><h2>The rules</h2>{RULES}</section>
 {site.shop()}
@@ -409,6 +412,11 @@ def build_home(site, cal, streets):
               "and street-cleaning times for every block.", body)
 
 
+def n_streets(streets, boro):
+    n = sum(1 for (b, _) in streets if b == boro)
+    return f"{n:,} street{'s' if n != 1 else ''}"
+
+
 def calendar_json(site, cal):
     out = {"_meta": {"source": cal["source"], "built": cal["built"]}}  # which feed answered; app.js ignores it
     for i in range(DAYS_AHEAD):
@@ -416,6 +424,69 @@ def calendar_json(site, cal):
         status, reason = day_status(day, cal)
         out[day.isoformat()] = [status, reason]
     return out
+
+
+CRLF = "\r\n"  # iCalendar line ending
+
+
+def ics_escape(text):
+    return text.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+
+
+def ics_fold(line):
+    """RFC 5545: lines over 75 octets continue on the next line after a leading space."""
+    out, raw = [], line.encode("utf-8")
+    while len(raw) > 75:
+        cut = 75
+        while (raw[cut] & 0xC0) == 0x80:  # don't split a UTF-8 character
+            cut -= 1
+        out.append(raw[:cut].decode("utf-8"))
+        raw = b" " + raw[cut:]
+    out.append(raw.decode("utf-8"))
+    return CRLF.join(out)
+
+
+def write_feed(site, cal):
+    """Subscribable calendar of upcoming ASP suspensions (holidays plus any 311 snow/emergency ones)."""
+    base = site.cfg["base_url"].rstrip("/") + "/"
+    stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    days = sorted({dt.date.fromisoformat(d) for d in list(cal["holidays"]) + list(cal["live"])
+                   if dt.date.fromisoformat(d) >= site.today - dt.timedelta(days=7)})
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", f"PRODID:-//{site.cfg['domain']}//ASP suspensions//EN", "CALSCALE:GREGORIAN",
+             "METHOD:PUBLISH", "X-WR-CALNAME:NYC Alternate Side Parking Suspensions",
+             "X-WR-CALDESC:" + ics_escape(f"Days NYC alternate side parking is suspended, from NYC 311 and DOT. {base}"),
+             "X-WR-TIMEZONE:America/New_York", "REFRESH-INTERVAL;VALUE=DURATION:PT1H", "X-PUBLISHED-TTL:PT1H"]
+    n = 0
+    for day in days:
+        status, reason = day_status(day, cal)
+        if status != "suspended":
+            continue
+        meters = cal["holidays"].get(day.isoformat(), {}).get("meters")
+        meter_note = {True: " Parking meters are in effect.", False: " Parking meters are suspended too.", None: ""}[meters]
+        desc = f"No need to move your car for alternate side parking.{meter_note} Always check your block's signs. {base}"
+        lines += ["BEGIN:VEVENT", f"UID:asp-{day:%Y%m%d}@{site.cfg['domain']}", f"DTSTAMP:{stamp}",
+                  f"DTSTART;VALUE=DATE:{day:%Y%m%d}", f"DTEND;VALUE=DATE:{day + dt.timedelta(days=1):%Y%m%d}",
+                  "SUMMARY:" + ics_escape("🚗 No ASP: " + (reason or "suspended")),
+                  "DESCRIPTION:" + ics_escape(desc), f"URL:{base}", "TRANSP:TRANSPARENT", "END:VEVENT"]
+        n += 1
+    lines.append("END:VCALENDAR")
+    (DIST / FEED_URL_PATH).write_text(CRLF.join(ics_fold(line) for line in lines) + CRLF, encoding="utf-8", newline="")
+    return n
+
+
+def feed_card(site):
+    host = site.cfg["base_url"].split("//", 1)[1].rstrip("/")
+    webcal = f"webcal://{host}/{FEED_URL_PATH}"
+    google = "https://calendar.google.com/calendar/render?cid=" + urllib.parse.quote(webcal, safe="")
+    https = f"https://{host}/{FEED_URL_PATH}"
+    bsky = next((s["url"] for s in site.cfg.get("social", []) if s["label"] == "Bluesky"), "")
+    bluesky = f'follow us on <a href="{esc(bsky)}">Bluesky</a>' if bsky else "check this page"
+    return f"""<section class="card feed" id="calendar"><h2>Get suspensions in your calendar</h2>
+<p>Subscribe once and every alternate side parking suspension shows up on your phone, including snow and emergency ones when 311 announces them.</p>
+<p class="feed-links"><a class="btn" href="{esc(google)}" rel="noopener" target="_blank">Add to Google Calendar</a>
+<a class="btn" href="{esc(webcal)}">Add to Apple / Outlook</a></p>
+<p class="fine">Other apps: subscribe to <code>{esc(https)}</code>. Calendar apps refresh on their own schedule (Google can take hours),
+so for last-minute changes {bluesky}.</p></section>"""
 
 
 def build_street(site, s):
@@ -483,6 +554,7 @@ def build(cal, rows, cfg, today):
     for boro, members in by_boro.items():
         build_borough(site, boro, members)
     (DIST / "calendar.json").write_text(json.dumps(calendar_json(site, cal)), encoding="utf-8")
+    n_feed = write_feed(site, cal)
     index = [[s["name"], s["borough"], s["path"]] for s in sorted(streets.values(), key=lambda s: -s["n_blocks"])]
     (DIST / "search.json").write_text(json.dumps(index, separators=(",", ":")), encoding="utf-8")
     urls = "".join(f"<url><loc>{esc(u)}</loc><lastmod>{today.isoformat()}</lastmod></url>" for u in site.urls)
@@ -495,7 +567,7 @@ def build(cal, rows, cfg, today):
     if cfg.get("domain"):
         (DIST / "CNAME").write_text(cfg["domain"] + "\n")
     print(f"Built {len(streets):,} street pages ({sum(s['n_blocks'] for s in streets.values()):,} blocks); "
-          f"status source: {cal['source']}; today: {day_status(today, cal)[0]}")
+          f"status source: {cal['source']}; today: {day_status(today, cal)[0]}; {n_feed} suspensions in the calendar feed")
 
 
 def nyc_today():
