@@ -111,6 +111,8 @@ def nyc311_days(today, key):
               "todate": (today + dt.timedelta(days=DAYS_AHEAD - 1)).strftime("%m/%d/%Y")}
     data = json.loads(get(NYC311_URL + "?" + urllib.parse.urlencode(params), {"Ocp-Apim-Subscription-Key": key}))
     out = {}
+    if not data.get("days"):
+        print(f"  311 calendar: unexpected response, top-level keys {sorted(data)[:10]}")
     for day in data.get("days", []):
         date = dt.datetime.strptime(str(day["today_id"]), "%Y%m%d").date().isoformat()
         for item in day.get("items", []):
@@ -389,7 +391,7 @@ def build_home(site, cal, streets):
 
 
 def calendar_json(site, cal):
-    out = {}
+    out = {"_meta": {"source": cal["source"], "built": cal["built"]}}  # which feed answered; app.js ignores it
     for i in range(DAYS_AHEAD):
         day = site.today + dt.timedelta(days=i)
         status, reason = day_status(day, cal)
