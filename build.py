@@ -30,6 +30,7 @@ SIGNS_WHERE = "record_type='Current' AND sign_description like '%BROOM%'"
 ICS_URL = "https://www.nyc.gov/html/dot/downloads/misc/{year}-alternate-side.ics"
 NYC311_URL = "https://api.nyc.gov/public/api/GetCalendar"
 PAGE_SIZE = 50000
+THIN_BLOCKS = 2       # streets with this many blocks or fewer are noindexed (kept on the site and in search)
 DAYS_AHEAD = 14       # days shown on the site and in calendar.json
 FEED_AHEAD = 89       # days of 311 status fetched for the calendar feed (the API caps ranges at 90)
 FEED_URL_PATH = "asp-suspensions.ics"
@@ -512,7 +513,7 @@ Rows highlighted are cleaned today.</p>
 {site.shop()}"""
     site.page(s["path"], f"{s['name']}, {s['borough']} alternate side parking schedule",
               f"When to move your car for street cleaning on {s['name']} in {s['borough']}: block-by-block alternate side parking times.",
-              body)
+              body, index=s["n_blocks"] > THIN_BLOCKS)
 
 
 def build_borough(site, boro, members):
