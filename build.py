@@ -108,19 +108,22 @@ def ics_suspensions(year):
 
 
 def nyc311_days(today, key):
-    """{date: {status, reason}} from the 311 Public API, which includes emergency suspensions."""
-    params = {"fromdate": today.strftime("%m/%d/%Y"),
-              "todate": (today + dt.timedelta(days=FEED_AHEAD)).strftime("%m/%d/%Y")}
-    data = json.loads(get(NYC311_URL + "?" + urllib.parse.urlencode(params), {"Ocp-Apim-Subscription-Key": key}))
+    """{date: {status, reason}} from the 311 Public API, which includes emergency suspensions.
+    The API returns at most ~45 days per request, so ask in 30-day windows out to FEED_AHEAD."""
     out = {}
-    if not data.get("days"):
-        print(f"  311 calendar: unexpected response, top-level keys {sorted(data)[:10]}")
-    for day in data.get("days", []):
-        date = dt.datetime.strptime(str(day["today_id"]), "%Y%m%d").date().isoformat()
-        for item in day.get("items", []):
-            if "parking" in item.get("type", "").lower():
-                out[date] = {"status": item.get("status", ""), "reason": item.get("exceptionName") or "",
-                             "details": item.get("details", "")}
+    for offset in range(0, FEED_AHEAD + 1, 30):
+        start = today + dt.timedelta(days=offset)
+        end = min(start + dt.timedelta(days=29), today + dt.timedelta(days=FEED_AHEAD))
+        params = {"fromdate": start.strftime("%m/%d/%Y"), "todate": end.strftime("%m/%d/%Y")}
+        data = json.loads(get(NYC311_URL + "?" + urllib.parse.urlencode(params), {"Ocp-Apim-Subscription-Key": key}))
+        if not data.get("days"):
+            print(f"  311 calendar: no days for {start}..{end}, top-level keys {sorted(data)[:10]}")
+        for day in data.get("days", []):
+            date = dt.datetime.strptime(str(day["today_id"]), "%Y%m%d").date().isoformat()
+            for item in day.get("items", []):
+                if "parking" in item.get("type", "").lower():
+                    out[date] = {"status": item.get("status", ""), "reason": item.get("exceptionName") or "",
+                                 "details": item.get("details", "")}
     return out
 
 
