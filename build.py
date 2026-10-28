@@ -414,7 +414,7 @@ class Site:
 </head>
 <body data-base="{self.base}">
 <header class="top"><a class="brand" href="{self.url()}">{esc(cfg['site_name'])}</a>
-<nav><a href="{self.url('#search')}">Find your street</a><a href="{self.url('rules/')}">The rules</a></nav></header>
+<nav><a href="{self.url('#search')}">Find your street</a><a href="{self.url('pickup/')}">Trash days</a><a href="{self.url('rules/')}">The rules</a></nav></header>
 <main>
 {body}
 </main>
@@ -490,6 +490,11 @@ def build_home(site, cal, streets):
 {site.ad("adsense_slot_top")}
 <section class="card"><h2>Upcoming suspensions</h2><ul class="hols">{hol or '<li>No suspensions on the city calendar in the next weeks.</li>'}</ul>
 <p class="fine">Snow and emergency suspensions are announced by 311, sometimes late the day before. This page updates every hour.</p></section>
+<section class="card" id="trash"><h2>When is my trash pickup?</h2>
+<form class="search addr" action="{site.url('pickup/')}" method="get">
+<input type="search" name="address" placeholder="e.g. 1225 Boston Rd, Bronx" autocomplete="street-address" aria-label="Your address">
+<button type="submit">Look up</button></form>
+<p class="fine">Trash, recycling, compost and bulk days for any NYC address, with holiday changes.</p></section>
 {feed_card(site)}
 <section class="card"><h2>Browse by borough</h2><ul class="zips">{boros}</ul></section>
 <section class="card"><h2>The rules</h2>{RULES}</section>
@@ -649,6 +654,26 @@ def build_borough(site, boro, members):
               f"Street-cleaning schedules for every street in {boro} with alternate side parking signs.", body)
 
 
+def build_pickup_page(site):
+    body = f"""<h1>When is my trash pickup?<span class="sub">Trash, recycling, compost and bulk days for any NYC address</span></h1>
+<section class="card">
+<form id="pickup-form" class="search addr" autocomplete="off">
+<input type="search" id="addr" list="addr-list" placeholder="e.g. 1225 Boston Rd, Bronx" aria-label="Your address">
+<datalist id="addr-list"></datalist><button type="submit">Look up</button></form>
+<p class="fine">Your address goes from your browser to NYC Planning's GeoSearch and NYC Open Data to find your DSNY
+collection area. It isn't sent to this site.</p></section>
+<section class="card pickup-result" id="pickup-result" hidden></section>
+<section class="card"><h2>Setting out trash</h2><ul class="rules">
+<li><b>Buildings with 1–9 units:</b> after 6 PM the evening before pickup, in official NYC Bins.</li>
+<li><b>Buildings with 10+ units:</b> after 6 PM in a lidded bin of 55 gallons or less, or bags on the curb after 8 PM.</li>
+<li><b>Deadline:</b> everything out by midnight.</li>
+</ul><p class="fine">From <a href="{DSNY_SETOUT}" rel="noopener">DSNY</a>. Recycling and compost go out the evening before their own pickup day.</p></section>
+{site.shop()}
+<script src="{site.url('static/pickup.js')}" defer></script>"""
+    site.page("pickup/", "When is my trash pickup? NYC trash, recycling and compost days by address",
+              "Look up your NYC trash, recycling, compost and bulk pickup days by address, with holiday and snow changes.", body)
+
+
 def build_static_pages(site):
     site.page("rules/", "NYC alternate side parking rules", "How NYC alternate side parking works: signs, suspensions, meters and fines.",
               f"<h1>NYC alternate side parking rules</h1><section class=\"card\">{RULES}</section>")
@@ -661,6 +686,8 @@ times for every block from the city's sign records on NYC Open Data.</p>
 <p>Questions or errors? Email <a href="mailto:{esc(site.cfg['contact_email'])}">{esc(site.cfg['contact_email'])}</a>.</p></section>""")
     site.page("privacy/", "Privacy policy", "What this site collects.", """<h1>Privacy policy</h1>
 <section class="card"><p>This site has no accounts and doesn't ask for personal information. Street searches run in your browser.</p>
+<p>The trash-pickup lookup sends the address you type from your browser to NYC Planning's GeoSearch service and to NYC Open Data
+to find your collection area. It isn't sent to us. Your browser remembers the last address you looked up, on your device only.</p>
 <p>We may use Google AdSense to show ads and Google Analytics to count visits. Google and its partners use cookies to serve ads
 based on your visits to this and other sites. You can opt out of personalized ads at
 <a href="https://www.google.com/settings/ads">Google Ads Settings</a>.</p></section>""")
@@ -676,6 +703,7 @@ def build(cal, rows, cfg, today, areas=None):
     site = Site(cfg, today)
     build_home(site, cal, streets)
     build_static_pages(site)
+    build_pickup_page(site)
     by_boro = {}
     for s in streets.values():
         build_street(site, s)
