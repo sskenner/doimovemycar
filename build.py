@@ -166,22 +166,27 @@ def day_status(day, cal):
 
 
 def collection_status(day, cal):
-    """('normal' | 'suspended', reason) for DSNY trash/recycling/compost pickup, or None if 311 didn't say.
+    """('normal' | 'delayed' | 'suspended', reason) for DSNY trash/recycling/compost pickup, or None when 311
+    has no information. 311 statuses: ON SCHEDULE, DELAYED, SUSPENDED, NOT IN EFFECT, NO INFORMATION.
     Sundays return None: most of the city has no pickup then anyway."""
     item = cal.get("collections", {}).get(day.isoformat())
     if not item or day.weekday() == 6:
         return None
     status = item["status"].upper()
-    if any(w in status for w in ("SUSPEND", "CANCEL", "NOT IN EFFECT", "NO COLLECTION")):
+    if "SUSPEND" in status or "NOT IN EFFECT" in status:
         return "suspended", item["reason"]
-    return "normal", ""
+    if "DELAY" in status:
+        return "delayed", item["reason"]
+    if "ON SCHEDULE" in status:
+        return "normal", ""
+    return None
 
 
 def trash_today(state):
     if not state:
         return ""
-    if state[0] == "suspended":
-        return "Trash & recycling pickup today is suspended" + (f" for {state[1]}" if state[1] else "") + "."
+    if state[0] in ("suspended", "delayed"):
+        return f"Trash & recycling pickup today is {state[0]}" + (f" for {state[1]}" if state[1] else "") + "."
     return "Trash & recycling pickup today is on schedule."
 
 
@@ -391,7 +396,8 @@ def week_strip(site, cal):
         note = esc(reason) if reason else ("Sunday" if status == "sunday" else "Move for the signs")
         cells.append(f'<li class="d {status}" data-date="{day.isoformat()}"><b>{"Today" if i == 0 else "Tomorrow" if i == 1 else f"{day:%a}"}</b>'
                      f'<span class="dt">{day:%b} {day.day}</span><span class="st">{label}</span><span class="why">{note}</span>'
-                     + ('<span class="tr">🗑️ No trash pickup</span>' if (collection_status(day, cal) or ("",))[0] == "suspended" else "")
+                     + {"suspended": '<span class="tr">🗑️ No trash pickup</span>',
+                        "delayed": '<span class="tr">🗑️ Pickup delayed</span>'}.get((collection_status(day, cal) or ("",))[0], "")
                      + '</li>')
     return f'<ol class="week">{"".join(cells)}</ol>'
 

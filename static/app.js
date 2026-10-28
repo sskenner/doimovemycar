@@ -39,7 +39,7 @@
     if (tl && t) {
       tl.hidden = false;
       tl.textContent = "🗑️ Trash & recycling pickup today is " +
-        (t[0] === "suspended" ? "suspended" + (t[1] ? " for " + t[1] : "") : "on schedule") + ".";
+        (t[0] === "normal" ? "on schedule" : t[0] + (t[1] ? " for " + t[1] : "")) + ".";
     }
     document.querySelectorAll(".week .d").forEach(function (li) {
       if (li.getAttribute("data-date") < today.iso) li.hidden = true;
