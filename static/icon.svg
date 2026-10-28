@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="1000" height="1000">
+  <rect width="1000" height="1000" fill="#b42318"/>
+  <g transform="translate(490 575) scale(1.2) translate(-500 -520)">
+    <!-- car, side view -->
+    <path fill="#ffffff" d="M340 470 L392 372 Q402 352 425 352 H585 Q606 352 619 368 L700 470 H760 Q810 470 818 520 L824 600 Q826 640 786 640 H214 Q176 640 178 602 L184 520 Q190 470 240 470 Z"/>
+    <path fill="#b42318" d="M378 470 L418 392 Q423 383 433 383 H496 V470 Z"/>
+    <path fill="#b42318" d="M526 470 V383 H580 Q590 383 597 391 L662 470 Z"/>
+    <rect x="760" y="505" width="40" height="22" rx="8" fill="#b42318" opacity=".35"/>
+    <g>
+      <circle cx="340" cy="640" r="78" fill="#b42318"/>
+      <circle cx="340" cy="640" r="62" fill="#ffffff"/>
+      <circle cx="340" cy="640" r="26" fill="#b42318"/>
+      <circle cx="662" cy="640" r="78" fill="#b42318"/>
+      <circle cx="662" cy="640" r="62" fill="#ffffff"/>
+      <circle cx="662" cy="640" r="26" fill="#b42318"/>
+    </g>
+  </g>
+  <!-- question badge -->
+  <circle cx="730" cy="290" r="128" fill="#157347" stroke="#b42318" stroke-width="22"/>
+  <path fill="none" stroke="#ffffff" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"
+        d="M680 250 Q680 200 730 200 Q782 200 782 248 Q782 280 752 296 Q730 308 730 336"/>
+  <circle cx="730" cy="384" r="21" fill="#ffffff"/>
+</svg>
