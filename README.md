@@ -27,3 +27,13 @@ Without `NYC_API_KEY` the site still works from the DOT holiday calendar, but it
 
 GitHub Pages via `.github/workflows/build.yml`, rebuilt hourly (signs refreshed daily). Secrets:
 `NYC_API_KEY` (free: api-portal.nyc.gov → "NYC 311 Public Developers" product) and optionally `SOCRATA_APP_TOKEN`.
+
+## Bluesky alerts
+
+After each hourly build, `post_bsky.py` posts to [@doimovemycar.com](https://bsky.app/profile/doimovemycar.com) when:
+
+- **6 PM–midnight:** tomorrow's ASP is suspended, or ASP is back in effect tomorrow after a suspension.
+- **5–11 AM:** ASP is suspended today for a reason that isn't on the holiday calendar (snow, emergencies).
+
+Each alert names its date and is posted once. Needs a Bluesky app password saved as the `BSKY_APP_PASSWORD`
+repository secret. Preview: `python post_bsky.py --dry-run --hour 19`.

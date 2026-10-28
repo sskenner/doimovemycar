@@ -41,6 +41,11 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: calendar
+          path: data/calendar.json
+          retention-days: 3
 
   deploy:
     needs: build
@@ -51,3 +56,23 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # Bluesky alerts (suspension tomorrow / back tomorrow / surprise suspension today). Runs after deploy so the
+  # site already shows the new status; post_bsky.py picks the hour window and never posts the same alert twice.
+  post:
+    needs: deploy
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: calendar
+          path: data
+      - name: Post to Bluesky
+        env:
+          BSKY_APP_PASSWORD: ${{ secrets.BSKY_APP_PASSWORD }}
+        run: python post_bsky.py
