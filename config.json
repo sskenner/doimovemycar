@@ -17,6 +17,8 @@
   ],
 
   "amazon_tag": "doimovemycar-20",
+
+  "cf_beacon_token": "a6a7e4eadf16455e99509bdd401d2a00",
   "amazon_products": [
     {"label": "Snow brush & ice scraper", "query": "extendable snow brush ice scraper car", "note": "Clear the car fast when ASP comes back after a storm"},
     {"label": "Collapsible snow shovel", "query": "collapsible car snow shovel", "note": "For digging out after the plows bury your spot"},

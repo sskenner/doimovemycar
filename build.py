@@ -393,6 +393,9 @@ class Site:
             head += (f'<script async src="https://www.googletagmanager.com/gtag/js?id={gid}"></script>'
                      "<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}"
                      f"gtag('js',new Date());gtag('config','{gid}');</script>")
+        if cfg.get("cf_beacon_token"):
+            head += ("<script defer src=\"https://static.cloudflareinsights.com/beacon.min.js\" "
+                     f"data-cf-beacon='{{\"token\": \"{esc(cfg['cf_beacon_token'])}\"}}'></script>")
         social = "".join(f' · <a href="{esc(s["url"])}" rel="me">{esc(s["label"])}</a>' for s in cfg.get("social", []))
         doc = f"""<!doctype html>
 <html lang="en">
@@ -690,7 +693,8 @@ times for every block from the city's sign records on NYC Open Data.</p>
 to find your collection area. It isn't sent to us. Your browser remembers the last address you looked up, on your device only.</p>
 <p>We may use Google AdSense to show ads and Google Analytics to count visits. Google and its partners use cookies to serve ads
 based on your visits to this and other sites. You can opt out of personalized ads at
-<a href="https://www.google.com/settings/ads">Google Ads Settings</a>.</p></section>""")
+<a href="https://www.google.com/settings/ads">Google Ads Settings</a>.</p>
+<p>We count visits with <a href="https://www.cloudflare.com/web-analytics/" rel="noopener">Cloudflare Web Analytics</a>, which doesn't use cookies or track individual visitors.</p></section>""")
 
 
 def build(cal, rows, cfg, today, areas=None):
